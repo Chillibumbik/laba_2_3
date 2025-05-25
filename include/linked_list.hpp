@@ -35,6 +35,15 @@ public:
     void InsertAt(T item, int index);
     void Remove(int index);
     LinkedList<T>* Concat(const LinkedList<T>* list);
+
+    T& GetRef(int index) {
+        if (index < 0 || index >= size) throw Errors::IndexOutOfRange();
+        Node* current = root;
+        for (int i = 0; i < index; ++i)
+            current = current->next;
+        return current->data;
+    }
+    
 };
 
 

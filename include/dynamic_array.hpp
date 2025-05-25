@@ -31,6 +31,12 @@ public:
 
     T& operator[](int index);
     const T& operator[](int index) const;
+
+    T& GetRef(int index) {
+        if (index < 0 || index >= size) throw Errors::IndexOutOfRange();
+        return data[index];
+    }
+    
 };
 
 

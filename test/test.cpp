@@ -5,7 +5,10 @@
 #include "linked_list.hpp"
 #include "array_sequence.hpp"
 #include "list_sequence.hpp"
-
+#include "queue.hpp"
+#include "stack.hpp"
+#include "deque.hpp"
+#include "user.hpp"
 
 /*
 Макрос	Что делает
@@ -162,4 +165,135 @@ TEST_CASE("Sequence: Operators", "[Sequence]") {
     REQUIRE(imarr3.Get(0) == "fd");
     REQUIRE(imarr2_final->GetFirst() == "daddy");
 
+}
+
+TEST_CASE("ArrayQueue: Basic Operations and Map/Reduce", "[ArrayQueue]") {
+    ArrayQueue<int> q;
+    q.Enqueue(1);
+    q.Enqueue(2);
+    q.Enqueue(3);
+    REQUIRE(q.GetLength() == 3);
+    REQUIRE(q.Peek() == 1);
+    REQUIRE(q.Dequeue() == 1);
+    REQUIRE(q.Get(0) == 2);
+
+    // Map: удвоить все значения
+    q.Map([](int& x) { x *= 2; });
+    REQUIRE(q.Get(0) == 4);
+    REQUIRE(q.Get(1) == 6);
+
+    // Where: оставить только > 4
+    q.Where([](int& x) { return x > 4; });
+    REQUIRE(q.GetLength() == 1);
+    REQUIRE(q.Get(0) == 6);
+
+    // Reduce: сохранить результат отдельно
+    auto sum = q.Reduce([](const int& a, const int& b) { return a + b; });
+    REQUIRE(sum == 6);
+}
+
+TEST_CASE("ListQueue: Basic Operations and Map/Reduce", "[ListQueue]") {
+    ListQueue<int> q;
+    q.Enqueue(10);
+    q.Enqueue(20);
+    q.Enqueue(30);
+    REQUIRE(q.GetLength() == 3);
+    REQUIRE(q.Peek() == 10);
+    REQUIRE(q.Dequeue() == 10);
+    REQUIRE(q.Get(0) == 20);
+
+    q.Map([](int& x) { x += 1; });
+    REQUIRE(q.Get(0) == 21);
+    REQUIRE(q.Get(1) == 31);
+
+    q.Where([](int& x) { return x % 2 == 1; });  // оставить нечётные
+    REQUIRE(q.GetLength() == 2);
+
+    auto result = q.Reduce([](const int& a, const int& b) { return a * b; });
+    REQUIRE(result == 651);
+}
+
+TEST_CASE("ArrayStack: Basic Operations", "[ArrayStack]") {
+    ArrayStack<std::string> st;
+    st.Push("hello");
+    st.Push("world");
+    REQUIRE(st.Top() == "world");
+    REQUIRE(st.Pop() == "world");
+    REQUIRE(st.Top() == "hello");
+    REQUIRE(st.GetLength() == 1);
+    st.Clear();
+    REQUIRE(st.IsEmpty());
+}
+
+TEST_CASE("ListStack: Basic Operations", "[ListStack]") {
+    ListStack<double> st;
+    st.Push(3.14);
+    st.Push(2.71);
+    REQUIRE(st.Top() == Approx(2.71));
+    REQUIRE(st.Pop() == Approx(2.71));
+    REQUIRE(st.Get(0) == Approx(3.14));
+}
+
+TEST_CASE("ArrayDeque: Basic Operations", "[ArrayDeque]") {
+    ArrayDeque<int> d;
+    d.PushBack(1);
+    d.PushFront(0);
+    d.PushBack(2);
+    REQUIRE(d.Front() == 0);
+    REQUIRE(d.Back() == 2);
+    REQUIRE(d.PopFront() == 0);
+    REQUIRE(d.PopBack() == 2);
+    REQUIRE(d.GetLength() == 1);
+}
+
+TEST_CASE("ListDeque: Basic Operations", "[ListDeque]") {
+    ListDeque<char> d;
+    d.PushBack('a');
+    d.PushFront('z');
+    d.PushBack('b');
+    REQUIRE(d.Front() == 'z');
+    REQUIRE(d.Back() == 'b');
+    d.PopBack();
+    REQUIRE(d.Back() == 'a');
+}
+
+TEST_CASE("Student in Stack/Queue/Deque", "[Student][Integration]") {
+    Student s1("Alice", 20, 1, "PMI", 4.8);
+    Student s2("Bob", 21, 2, "AI", 4.2);
+    Student s3("Clara", 19, 3, "Math", 4.5);
+
+    SECTION("Stack<Student>") {
+        ArrayStack<Student> st;
+        st.Push(s1);
+        st.Push(s2);
+        REQUIRE(st.Top() == s2);
+        REQUIRE(st.Pop() == s2);
+        REQUIRE(st.Top() == s1);
+    }
+
+    SECTION("Queue<Student>") {
+        ListQueue<Student> q;
+        q.Enqueue(s1);
+        q.Enqueue(s2);
+        REQUIRE(q.Peek() == s1);
+        REQUIRE(q.Dequeue() == s1);
+        REQUIRE(q.Get(0) == s2);
+    }
+
+    SECTION("Deque<Student>") {
+        ArrayDeque<Student> d;
+        d.PushBack(s1);
+        d.PushFront(s2);
+        d.PushBack(s3);
+        REQUIRE(d.Front() == s2);
+        REQUIRE(d.Back() == s3);
+        REQUIRE(d.Get(1) == s1);
+    }
+
+    SECTION("Comparison and Copy") {
+        Student copy = s1;
+        REQUIRE(copy == s1);
+        copy.age = 99;
+        REQUIRE_FALSE(copy == s1);
+    }
 }

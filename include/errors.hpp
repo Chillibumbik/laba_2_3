@@ -23,7 +23,8 @@ enum class ErrorCode {
     INVALID_INDICES,
     NEGATIVE_COUNT,
     NULL_LIST,
-    CONCAT_TYPE_MISMATCH
+    CONCAT_TYPE_MISMATCH,
+    EMPTY_STACK
 };
 
 inline std::vector<Error> ErrorsList = {
@@ -39,7 +40,8 @@ inline std::vector<Error> ErrorsList = {
     {9, "Invalid indices"},
     {10, "Negative count"},
     {11, "Null list"},
-    {12, "Cannot concat sequences of different types"}
+    {12, "Cannot concat sequences of different types"},
+    {13, "Empty stack"}
 };
 
 namespace Errors {
@@ -117,5 +119,8 @@ namespace Errors {
 
     inline std::logic_error ConcatTypeMismatchError() {
         return std::logic_error(ErrorsList[static_cast<int>(ErrorCode::CONCAT_TYPE_MISMATCH)].message);
+    }
+    inline std::runtime_error EmptyStackError() {
+        return std::runtime_error(ErrorsList[static_cast<int>(ErrorCode::EMPTY_STACK)].message);
     }
 }

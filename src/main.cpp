@@ -1,32 +1,37 @@
-
 #include <iostream>
 #include <string>
 #include <vector>
 #include <limits>
-#include "array_sequence.hpp"
-#include "list_sequence.hpp"
+#include <typeinfo>
+
+#include "stack.hpp"
+#include "queue.hpp"
+#include "deque.hpp"
 #include "user.hpp"
 #include "errors.hpp"
 
+// ------------------------------------------------------------
+// Утилиты ввода‑вывода
+// ------------------------------------------------------------
 void ClearInput() {
     std::cin.clear();
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
-int GetIntInput(const std::string& prompt = "") {
-    int value;
+int GetInt(const std::string& prompt = "") {
+    int v;
     if (!prompt.empty()) std::cout << prompt;
-    if (!(std::cin >> value)) {
+    if (!(std::cin >> v)) {
         ClearInput();
         throw Errors::InvalidArgument();
     }
-    return value;
+    return v;
 }
 
 template<typename T>
-T GetTypedInput(const std::string& prompt = "Enter value: ") {
-    T value;
-    std::cout << prompt;
+T GetTyped(const std::string& prompt = "Enter value: ") {
+    if (!prompt.empty()) std::cout << prompt;
+    T value{};
     if (!(std::cin >> value)) {
         ClearInput();
         throw Errors::InvalidArgument();
@@ -34,219 +39,320 @@ T GetTypedInput(const std::string& prompt = "Enter value: ") {
     return value;
 }
 
-struct ISequenceWrapper {
-    virtual ~ISequenceWrapper() = default;
-    virtual void Show() const = 0;
-    virtual void Append() = 0;
-    virtual void Prepend() = 0;
-    virtual void InsertAt() = 0;
-    virtual void RemoveAt() = 0;
-    virtual void GetAt() const = 0;
-    virtual ISequenceWrapper* GetSubsequence() const = 0;
-    virtual ISequenceWrapper* Concat(const ISequenceWrapper* other) const = 0;
-    virtual const std::string& TypeKey() const = 0;
+
+
+template<>
+Student GetTyped<Student>(const std::string& prompt) { Student s; std::cin >> s; return s; }
+
+template<>
+Teacher GetTyped<Teacher>(const std::string& prompt) { Teacher t; std::cin >> t; return t; }
+
+// ------------------------------------------------------------
+// Базовый интерфейс
+// ------------------------------------------------------------
+class IWrapper {
+public:
+    virtual ~IWrapper() = default;
+    virtual void ShowElements() const = 0;
+    virtual void Menu() = 0;             
+    virtual std::string Info() const = 0; 
 };
 
+// ---------------------------------------------------
+// Перечисления‑помощники
+// ---------------------------------------------------
+enum class StructKind { STACK = 1, QUEUE, DEQUE };
+static inline std::string ToString(StructKind k) {
+    switch (k) {
+        case StructKind::STACK: return "stack";
+        case StructKind::QUEUE: return "queue";
+        case StructKind::DEQUE: return "deque";
+    }
+    return "?";
+}
+
+enum class Container { ARRAY = 1, LIST };
+static inline std::string ToString(Container c) {
+    return (c == Container::ARRAY ? "array" : "list");
+}
+
+// ------------------------------------------------------
+// Шаблонные обертк
+// -------------------------------------------------------
+
 template<typename T>
-struct SequenceWrapper : public ISequenceWrapper {
-    Sequence<T>* seq;
-    std::string structure;
-    std::string type_key;
+class StackWrapper : public IWrapper {
+    Container c_;
+    std::string typeKey_;
+    Stack<T>* st_;
 
-    SequenceWrapper(const std::string& structure_, const std::string& key) : structure(structure_), type_key(key) {
-        if (structure == "array") seq = new MutableArraySequence<T>();
-        else seq = new MutableListSequence<T>();
+    Stack<T>* makeStack() {
+        if (c_ == Container::ARRAY) return new ArrayStack<T>();
+        return new ListStack<T>();
+    }
+public:
+    StackWrapper(Container c, const std::string& key) : c_(c), typeKey_(key), st_(makeStack()) {}
+    ~StackWrapper() override { delete st_; }
+
+    // IWrapper
+    std::string Info() const override {
+        return "Stack<" + typeKey_ + ">(" + ToString(c_) + ", size=" + std::to_string(st_->GetLength()) + ")";
     }
 
-    ~SequenceWrapper() override {
-        delete seq;
-    }
-
-    void Show() const override {
+    void ShowElements() const override {
         std::cout << "[ ";
-        for (int i = 0; i < seq->GetLength(); ++i)
-            std::cout << seq->Get(i) << " ";
-        std::cout << "] (Type: " << type_key << ", Structure: " << structure << ")\n";
+        for (int i = 0; i < st_->GetLength(); ++i) std::cout << st_->Get(i) << " ";
+        std::cout << "]\n";
     }
 
-    void Append() override {
-        T val = GetTypedInput<T>("Enter value to append: ");
-        seq->Append(val);
-    }
-
-    void Prepend() override {
-        T val = GetTypedInput<T>("Enter value to prepend: ");
-        seq->Prepend(val);
-    }
-
-    void InsertAt() override {
-        std::cout << "Valid position: 0 to " << seq->GetLength() << "\n";
-        int index = GetIntInput("Enter position: ");
-        if (index < 0 || index > seq->GetLength()) throw Errors::IndexOutOfRange();
-        T val = GetTypedInput<T>();
-        seq->InsertAt(val, index);
-    }
-
-    void RemoveAt() override {
-        std::cout << "Valid index: 0 to " << seq->GetLength() - 1 << "\n";
-        int index = GetIntInput("Enter index to remove: ");
-        if (index < 0 || index >= seq->GetLength()) throw Errors::IndexOutOfRange();
-        seq->Remove(index);
-    }
-
-    void GetAt() const override {
-        std::cout << "Valid index: 0 to " << seq->GetLength() - 1 << "\n";
-        int index = GetIntInput("Enter index to get: ");
-        if (index < 0 || index >= seq->GetLength()) throw Errors::IndexOutOfRange();
-        std::cout << "Element: " << seq->Get(index) << "\n";
-    }
-
-    ISequenceWrapper* GetSubsequence() const override {
-        std::cout << "Valid range: 0 to " << seq->GetLength() - 1 << "\n";
-        int start = GetIntInput("Enter start: ");
-        int end = GetIntInput("Enter end: ");
-        if (start < 0 || end >= seq->GetLength() || start > end) throw Errors::IndexOutOfRange();
-        Sequence<T>* sub = seq->GetSubsequence(start, end);
-        auto* result = new SequenceWrapper<T>(structure, type_key);
-        delete result->seq;
-        result->seq = sub;
-        return result;
-    }
-
-    ISequenceWrapper* Concat(const ISequenceWrapper* other) const override {
-        auto other_casted = dynamic_cast<const SequenceWrapper<T>*>(other);
-        if (!other_casted) throw Errors::ConcatTypeMismatchError();
-    
-        Sequence<T>* new_seq;
-        if (structure == "array") {
-            new_seq = new MutableArraySequence<T>();
-        } else if (structure == "list") {
-            new_seq = new MutableListSequence<T>();
-        } else {
-            throw Errors::InvalidArgument();
+    void Menu() override {
+        while (true) {
+            std::cout << "\n--- Stack menu ---\n";
+            std::cout << "1. Push\n2. Pop\n3. Top\n4. Clear\n5. Show elements\n6. Back\nChoose: ";
+            try {
+                int ch = GetInt();
+                switch (ch) {
+                    case 1: {
+                        T val = GetTyped<T>();
+                        st_->Push(val);
+                        break;
+                    }
+                    case 2: {
+                        T val = st_->Pop();
+                        std::cout << "Popped: " << val << "\n";
+                        break;
+                    }
+                    case 3: {
+                        std::cout << "Top: " << st_->Top() << "\n";
+                        break;
+                    }
+                    case 4: st_->Clear(); std::cout << "Cleared\n"; break;
+                    case 5: ShowElements(); break;
+                    case 6: return; // back
+                    default: std::cout << "Invalid\n";
+                }
+            } catch (const std::exception& e) { std::cout << "Error: " << e.what() << "\n"; }
         }
-    
-        for (int i = 0; i < seq->GetLength(); ++i)
-            new_seq->Append(seq->Get(i));
-        for (int i = 0; i < other_casted->seq->GetLength(); ++i)
-            new_seq->Append(other_casted->seq->Get(i));
-    
-        auto* result = new SequenceWrapper<T>(structure, type_key);
-        delete result->seq;
-        result->seq = new_seq;
-        return result;
     }
-    
+};
 
-    const std::string& TypeKey() const override {
-        return type_key;
+//--------------------------------------------------------------
+
+template<typename T>
+class QueueWrapper : public IWrapper {
+    Container c_;
+    std::string typeKey_;
+    Queue<T>* q_;
+
+    Queue<T>* makeQueue() {
+        if (c_ == Container::ARRAY) return new ArrayQueue<T>();
+        return new ListQueue<T>();
     }
+public:
+    QueueWrapper(Container c, const std::string& key) : c_(c), typeKey_(key), q_(makeQueue()) {}
+    ~QueueWrapper() override { delete q_; }
+
+    std::string Info() const override {
+        return "Queue<" + typeKey_ + ">(" + ToString(c_) + ", size=" + std::to_string(q_->GetLength()) + ")";
+    }
+
+    void ShowElements() const override {
+        std::cout << "[ ";
+        for (int i = 0; i < q_->GetLength(); ++i) std::cout << q_->Get(i) << " ";
+        std::cout << "]\n";
+    }
+
+    void Menu() override {
+        while (true) {
+            std::cout << "\n--- Queue menu ---\n";
+            std::cout << "1. Enqueue\n2. Dequeue\n3. Peek\n4. Clear\n5. Show elements\n6. Back\nChoose: ";
+            try {
+                int ch = GetInt();
+                switch (ch) {
+                    case 1: { // Enqueue
+                        T val = GetTyped<T>();
+                        q_->Enqueue(val);
+                        break;
+                    }
+                    case 2: { // Dequeue
+                        T val = q_->Dequeue();
+                        std::cout << "Dequeued: " << val << "\n";
+                        break;
+                    }
+                    case 3: { // Peek
+                        std::cout << "Front element: " << q_->Peek() << "\n";
+                        break;
+                    }
+                    case 4: q_->Clear(); std::cout << "Cleared\n"; break; 
+                    case 5: ShowElements(); break;
+                    case 6: return;
+                    default: std::cout << "Invalid\n"; break;
+                }
+            } catch (const std::exception& e) { std::cout << "Error: " << e.what() << "\n"; }
+        }
+    }
+};
+
+//--------------------------------------------------------------------
+
+template<typename T>
+class DequeWrapper : public IWrapper {
+    Container c_;
+    std::string typeKey_;
+    Deque<T>* d_;
+
+    Deque<T>* makeDeque() {
+        if (c_ == Container::ARRAY) return new ArrayDeque<T>();
+        return new ListDeque<T>();
+    }
+public:
+    DequeWrapper(Container c, const std::string& key) : c_(c), typeKey_(key), d_(makeDeque()) {}
+    ~DequeWrapper() override { delete d_; }
+
+    std::string Info() const override {
+        return "Deque<" + typeKey_ + ">(" + ToString(c_) + ", size=" + std::to_string(d_->GetLength()) + ")";
+    }
+
+    void ShowElements() const override {
+        std::cout << "[ ";
+        for (int i = 0; i < d_->GetLength(); ++i) std::cout << d_->Get(i) << " ";
+        std::cout << "]\n";
+    }
+
+    void Menu() override {
+        while (true) {
+            std::cout << "\n--- Deque menu ---\n";
+            std::cout << "1. PushFront\n2. PushBack\n3. PopFront\n4. PopBack\n5. Front\n6. Back\n7. Clear\n8. Show elements\n9. Back to main\nChoose: ";
+            try {
+                int ch = GetInt();
+                switch (ch) {
+                    case 1: d_->PushFront(GetTyped<T>()); break; 
+                    case 2: d_->PushBack(GetTyped<T>()); break;
+                    case 3: std::cout << "PopFront: " << d_->PopFront() << "\n"; break;
+                    case 4: std::cout << "PopBack: " << d_->PopBack() << "\n"; break;
+                    case 5: std::cout << "Front: " << d_->Front() << "\n"; break;
+                    case 6: std::cout << "Back: " << d_->Back() << "\n"; break;
+                    case 7: d_->Clear(); std::cout << "Cleared\n"; break;
+                    case 8: ShowElements(); break;
+                    case 9: return;
+                    default: std::cout << "Invalid\n";
+                }
+            } catch (const std::exception& e) { std::cout << "Error: " << e.what() << "\n"; }
+        }
+    }
+};
+
+
+struct TypeChoice {
+    int id; std::string name;
+};
+static const std::vector<TypeChoice> typeChoices = {
+    {1, "int"}, {2, "double"}, {3, "string"}, {4, "student"}, {5, "teacher"}
 };
 
 void ShowTypeMenu() {
-    std::cout << "Select type:\n1. int\n2. double\n3. string\n4. user\n";
-}
-void ShowStructureMenu() {
-    std::cout << "Select structure:\n1. array\n2. list\n";
+    std::cout << "Select element type:\n";
+    for (auto t : typeChoices) std::cout << t.id << ". " << t.name << "\n";
 }
 
-int interface(std::vector<ISequenceWrapper*>& sequences) {
+Container AskContainer() {
+    std::cout << "Select container implementation:\n1. array\n2. list\nChoice: ";
+    int v = GetInt();
+    if (v == 1) return Container::ARRAY;
+    if (v == 2) return Container::LIST;
+    throw Errors::InvalidArgument();
+}
+
+StructKind AskStructKind() {
+    std::cout << "Select data structure:\n1. stack\n2. queue\n3. deque\nChoice: ";
+    int v = GetInt();
+    if (v >= 1 && v <= 3) return static_cast<StructKind>(v);
+    throw Errors::InvalidArgument();
+}
+
+IWrapper* CreateWrapper() {
+    StructKind sk = AskStructKind();
+    Container cont = AskContainer();
+    ShowTypeMenu();
+    int typeId = GetInt("Choice: ");
+
+    switch (typeId) {
+        case 1: { // int
+            if (sk == StructKind::STACK) return new StackWrapper<int>(cont, "int");
+            if (sk == StructKind::QUEUE) return new QueueWrapper<int>(cont, "int");
+            return new DequeWrapper<int>(cont, "int");
+        }
+        case 2: { // double
+            if (sk == StructKind::STACK) return new StackWrapper<double>(cont, "double");
+            if (sk == StructKind::QUEUE) return new QueueWrapper<double>(cont, "double");
+            return new DequeWrapper<double>(cont, "double");
+        }
+        case 3: { // string
+            if (sk == StructKind::STACK) return new StackWrapper<std::string>(cont, "string");
+            if (sk == StructKind::QUEUE) return new QueueWrapper<std::string>(cont, "string");
+            return new DequeWrapper<std::string>(cont, "string");
+        }
+        case 4: { // user (Student)
+            if (sk == StructKind::STACK) return new StackWrapper<Student>(cont, "student");
+            if (sk == StructKind::QUEUE) return new QueueWrapper<Student>(cont, "student");
+            return new DequeWrapper<Student>(cont, "student");
+        }
+        case 5: { // user (Teacher)
+            if (sk == StructKind::STACK) return new StackWrapper<Teacher>(cont, "teacher");
+            if (sk == StructKind::QUEUE) return new QueueWrapper<Teacher>(cont, "teacher");
+            return new DequeWrapper<Teacher>(cont, "teacher");
+        }
+        default: throw Errors::InvalidArgument();
+    }
+}
+
+
+void RunApplication() {
+    std::vector<IWrapper*> structs;
     while (true) {
-        std::cout << "\n1. Show\n2. Append\n3. Prepend\n4. Remove element\n5. Insert element at index\n";
-        std::cout << "6. Get element by index\n7. Get subsequence\n8. Concat sequences\n";
-        std::cout << "9. Add sequence\n10. Remove sequence\n11. Exit\nChoose action: ";
-
+        std::cout << "\n==== Main menu ====\n";
+        std::cout << "1. List structures\n2. Add structure\n3. Work with structure\n4. Remove structure\n5. Exit\nChoose: ";
         try {
-            int choice = GetIntInput();
-
-            if (choice != 9 && choice != 11 && sequences.empty()) {
-                std::cout << "No sequences yet. Add a sequence first.\n";
-                continue;
-            }
-
+            int choice = GetInt();
             switch (choice) {
-                case 1: // show
-                    for (size_t i = 0; i < sequences.size(); ++i) {
-                        std::cout << i << ": ";
-                        sequences[i]->Show();
-                    }
-                    break;
-
-                case 2: case 3: case 4: case 5: case 6: case 7: { // inner operation
-                    std::cout << "Choose sequence index (from 0 to " << sequences.size() - 1 << "): ";
-                    int idx = GetIntInput();
-                    if (idx < 0 || static_cast<size_t>(idx) >= sequences.size()) throw Errors::IndexOutOfRange();
-                    switch (choice) {
-                        case 2: sequences[idx]->Append(); break; // append
-                        case 3: sequences[idx]->Prepend(); break; // prepend
-                        case 4: sequences[idx]->RemoveAt(); break; // remove
-                        case 5: sequences[idx]->InsertAt(); break; // insert
-                        case 6: sequences[idx]->GetAt(); break; // get element
-                        case 7: { // get subs
-                            ISequenceWrapper* result = sequences[idx]->GetSubsequence();
-                            sequences.push_back(result);
-                            std::cout << "Subsequence added as index " << sequences.size() - 1 << "\n";
-                            break;
-                        }
+                case 1: { // list
+                    if (structs.empty()) { std::cout << "No structures yet.\n"; break; }
+                    for (size_t i = 0; i < structs.size(); ++i) {
+                        std::cout << i << ": " << structs[i]->Info() << "\n";
+                        structs[i]->ShowElements();
                     }
                     break;
                 }
-
-                case 8: { // concat sequence
-                    std::cout << "First sequence index (0 to " << sequences.size() - 1 << "): ";
-                    int i1 = GetIntInput();
-                    std::cout << "Second sequence index (0 to " << sequences.size() - 1 << "): ";
-                    int i2 = GetIntInput();
-                    if (i1 < 0 || i2 < 0 || static_cast<size_t>(i1) >= sequences.size() || static_cast<size_t>(i2) >= sequences.size())
-                        throw Errors::IndexOutOfRange();
-                    ISequenceWrapper* result = sequences[i1]->Concat(sequences[i2]);
-                    sequences.push_back(result);
-                    std::cout << "Concatenated sequence added as index " << sequences.size() - 1 << "\n";
+                case 2: { // add
+                    structs.push_back(CreateWrapper());
+                    std::cout << "Structure added as index " << structs.size() - 1 << "\n";
                     break;
                 }
-
-                case 9: { // add sequence
-                    ShowTypeMenu();
-                    int t = GetIntInput("Enter type: ");
-                    std::string type;
-                    switch (t) {
-                        case 1: type = "int"; break;
-                        case 2: type = "double"; break;
-                        case 3: type = "string"; break;
-                        case 4: type = "user"; break;
-                        default: throw Errors::InvalidArgument();
-                    }
-
-                    ShowStructureMenu();
-                    int s = GetIntInput("Enter structure: ");
-                    std::string structure = (s == 1) ? "array" : (s == 2) ? "list" : throw Errors::InvalidArgument();
-
-                    if (type == "int") sequences.push_back(new SequenceWrapper<int>(structure, type));
-                    else if (type == "double") sequences.push_back(new SequenceWrapper<double>(structure, type));
-                    else if (type == "string") sequences.push_back(new SequenceWrapper<std::string>(structure, type));
-                    else if (type == "user") sequences.push_back(new SequenceWrapper<User>(structure, type));
+                case 3: { // work
+                    if (structs.empty()) { std::cout << "No structures yet.\n"; break; }
+                    std::cout << "Available indices: 0 to " << structs.size() - 1 << "\n";
+                    int idx = GetInt("Index: ");
+                    if (idx < 0 || static_cast<size_t>(idx) >= structs.size()) throw Errors::IndexOutOfRange();
+                    structs[idx]->Menu();
                     break;
                 }
-
-                case 10: { //remove
-                    std::cout << "Index to remove (0 to " << sequences.size() - 1 << "): ";
-                    int idx = GetIntInput();
-                    if (idx < 0 || static_cast<size_t>(idx) >= sequences.size()) throw Errors::IndexOutOfRange();
-                    delete sequences[idx];
-                    sequences.erase(sequences.begin() + idx);
-                    std::cout << "Sequence has been removed";
+                case 4: { // remove
+                    if (structs.empty()) { std::cout << "Nothing to remove.\n"; break; }
+                    std::cout << "Available indices: 0 to " << structs.size() - 1 << "\n";
+                    int idx = GetInt("Index to remove: ");
+                    if (idx < 0 || static_cast<size_t>(idx) >= structs.size()) throw Errors::IndexOutOfRange();
+                    delete structs[idx];
+                    structs.erase(structs.begin() + idx);
+                    std::cout << "Removed.\n";
                     break;
                 }
-
-                case 11: //exit
-                    std::cout << "Exiting...\n";
-                    for (auto* ptr : sequences) delete ptr;
-                    return 0;
-
-                default:
-                    std::cout << "Invalid action.\n";
+                case 5: { // exit
+                    for (auto* p : structs) delete p;
+                    std::cout << "Goodbye!\n";
+                    return;
+                }
+                default: std::cout << "Invalid choice.\n";
             }
-
         } catch (const std::exception& e) {
             std::cout << "Error: " << e.what() << "\n";
         }
@@ -254,32 +360,6 @@ int interface(std::vector<ISequenceWrapper*>& sequences) {
 }
 
 int main() {
-    std::vector<ISequenceWrapper*> sequences;
-    interface(sequences);
+    RunApplication();
+    return 0;
 }
-
-
-//main пустой ---ВЫПОЛНЕНО---
-//не везде const в аргументах(напимер concat) ---ВЫПОЛНЕНО---
-//ошибки - так не надо(сделать как у володи(в телефоне лежит)) - Не могу, ибо ловлю ошибки
-//concat работает за линию, а можно за константу (очень просто) ---ВЫПОЛНЕНО---
-//в dynamicArray->remove - сдвиги лишние (можно перенести сразу) ---ВЫПОЛНЕНО---
-//сделайте перегрузку для concat (оператор +) ---ВЫПОЛНЕНО---
-//arraySequence - где capacity? ---ВЫПОЛНЕНО---
-//зачем явно вызывать delete? --- ВЫПОЛНЕНО---
-//тесты (существуют (сарказм)) - сделать нормальные  ---ВЫПОЛНЕНО---
-//везде сначала объявление, а потом реализация(для последовательностей нарушил)  ---ВЫПОЛНЕНО---
-//хочу как в первой лабе список последовательностей, чтобы можно было разные последовательности выбирать ---ВЫПОЛНЕНО---
-//добавить пользовательский тип - какую-нибудь структуру (например, user) ---ВЫПОЛНЕНО---
-//когда у меня спрашивают индекс - пусть скажут, в каких пределах он может изменяться ---ВЫПОЛНЕНО---
-//подпоследовательность и сконкатинированна пос-ть сохраняются в новую пос-ть ---ВЫПОЛНЕНО---
-
-//shared / unique указатели до слнд еместра не использовать ---ВЫПОЛНЕНО
-//тесты: сравнивать массивы и списки целиком, а не посимвольно (с ожидаемым массивом) ---ВЫПОЛНЕНО---
-//перегрузка для сравнения (==)  ---ВЫПОЛНЕНО--- 
-//ошибки макс скинет ---ВЫПОЛЕНО---
-//show также выводит тип пос-ти ---ВЫПОЛНЕНО---
-//не везде подсказывает доступные индексы (например, subsequence) ---ВЫПОЛНЕНО---
-//subsequence - не добавляет в пос-ти результат ---ВЫПОЛНЕНО---
-    //concat должен позволять добавлять к array list и наоборот. тип результата == типу первой пос-и ---ВЫРОЛНЕНО---
-
